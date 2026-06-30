@@ -23,7 +23,7 @@ def get_current_user(authorization: str = Header(None), db: Session = Depends(ge
 
     return user
 
-# ---------- Schemas ----------
+# ---------- SCHEMAS ----------
 class UserCreate(BaseModel):
     username: str
     password: str
@@ -46,8 +46,10 @@ class WikiCreate(BaseModel):
     title: str
     content: str
 
-class WikiOut(WikiCreate):
-    pass
+class CommentCreate(BaseModel):
+    target_type: str  # article or wiki
+    target_id: str
+    content: str
 
 # ---------- AUTH ----------
 @app.post("/auth/register", response_model=UserOut)
@@ -71,7 +73,7 @@ def login(user: UserCreate, db: Session = Depends(get_db)):
 
     return {"message": "login successful", "token": db_user.id}
 
-# ---------- ARTICLES (PROTECTED) ----------
+# ---------- ARTICLES ----------
 @app.post("/articles", response_model=ArticleOut)
 def create_article(
     article: ArticleCreate,
@@ -88,6 +90,16 @@ def create_article(
     db.add(db_article)
     db.commit()
     db.refresh(db_article)
+
+    # version snapshot
+    version = models.ArticleVersion(
+        article_id=db_article.id,
+        title=db_article.title,
+        content=db_article.content
+    )
+    db.add(version)
+    db.commit()
+
     return ArticleOut(
         id=db_article.id,
         title=db_article.title,
@@ -116,16 +128,37 @@ def get_article(article_id: str, db: Session = Depends(get_db)):
     if not a:
         return {"error": "not found"}
 
-    return ArticleOut(
-        id=a.id,
-        title=a.title,
-        content=a.content,
-        author=a.author,
-        tags=a.tags.split(",") if a.tags else []
-    )
+    return a
+
+@app.get("/articles/{article_id}/history")
+def article_history(article_id: str, db: Session = Depends(get_db)):
+    return db.query(models.ArticleVersion).filter(
+        models.ArticleVersion.article_id == article_id
+    ).all()
+
+@app.post("/articles/{article_id}/revert/{version_id}")
+def revert_article(article_id: str, version_id: str, db: Session = Depends(get_db)):
+    version = db.query(models.ArticleVersion).filter(
+        models.ArticleVersion.id == version_id
+    ).first()
+
+    article = db.query(models.Article).filter(
+        models.Article.id == article_id
+    ).first()
+
+    if not version or not article:
+        return {"error": "not found"}
+
+    article.title = version.title
+    article.content = version.content
+
+    db.commit()
+    db.refresh(article)
+
+    return {"message": "reverted"}
 
 # ---------- WIKI ----------
-@app.post("/wiki", response_model=WikiOut)
+@app.post("/wiki")
 def create_wiki(page: WikiCreate, db: Session = Depends(get_db)):
     db_page = models.WikiPage(
         slug=page.slug,
@@ -135,7 +168,16 @@ def create_wiki(page: WikiCreate, db: Session = Depends(get_db)):
     db.add(db_page)
     db.commit()
     db.refresh(db_page)
-    return page
+
+    version = models.WikiVersion(
+        slug=db_page.slug,
+        title=db_page.title,
+        content=db_page.content
+    )
+    db.add(version)
+    db.commit()
+
+    return db_page
 
 @app.get("/wiki")
 def list_wiki(db: Session = Depends(get_db)):
@@ -158,30 +200,39 @@ def update_wiki(slug: str, page: WikiCreate, db: Session = Depends(get_db)):
     db_page.content = page.content
     db.commit()
     db.refresh(db_page)
+
+    version = models.WikiVersion(
+        slug=db_page.slug,
+        title=db_page.title,
+        content=db_page.content
+    )
+    db.add(version)
+    db.commit()
+
     return db_page
 
-# ---------- SEARCH ----------
-@app.get("/search")
-def search(q: str, db: Session = Depends(get_db)):
-    query = f"%{q}%"
-
-    articles = db.query(models.Article).filter(
-        models.Article.title.ilike(query) |
-        models.Article.content.ilike(query)
+@app.get("/wiki/{slug}/history")
+def wiki_history(slug: str, db: Session = Depends(get_db)):
+    return db.query(models.WikiVersion).filter(
+        models.WikiVersion.slug == slug
     ).all()
 
-    wiki_pages = db.query(models.WikiPage).filter(
-        models.WikiPage.title.ilike(query) |
-        models.WikiPage.content.ilike(query)
-    ).all()
+# ---------- COMMENTS ----------
+@app.post("/comments")
+def add_comment(comment: CommentCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    db_comment = models.Comment(
+        target_type=comment.target_type,
+        target_id=comment.target_id,
+        user_id=user.id,
+        content=comment.content
+    )
+    db.add(db_comment)
+    db.commit()
+    return {"message": "comment added"}
 
-    return {
-        "articles": [
-            {"id": a.id, "title": a.title, "type": "article"}
-            for a in articles
-        ],
-        "wiki": [
-            {"slug": w.slug, "title": w.title, "type": "wiki"}
-            for w in wiki_pages
-        ]
-    }
+@app.get("/comments")
+def list_comments(target_type: str, target_id: str, db: Session = Depends(get_db)):
+    return db.query(models.Comment).filter(
+        models.Comment.target_type == target_type,
+        models.Comment.target_id == target_id
+    ).all()
