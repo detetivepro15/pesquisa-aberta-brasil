@@ -21,11 +21,21 @@ class ArticleCreate(BaseModel):
 class ArticleOut(ArticleCreate):
     id: str
 
+class WikiCreate(BaseModel):
+    slug: str
+    title: str
+    content: str
+
+class WikiOut(WikiCreate):
+    pass
+
 # ---------- Routes ----------
 
 @app.get("/")
 def root():
     return {"message": "Pesquisa Aberta Brasil API ativa"}
+
+# -------- Articles --------
 
 @app.post("/articles", response_model=ArticleOut)
 def create_article(article: ArticleCreate, db: Session = Depends(get_db)):
@@ -73,3 +83,43 @@ def get_article(article_id: str, db: Session = Depends(get_db)):
         author=a.author,
         tags=a.tags.split(",") if a.tags else []
     )
+
+# -------- Wiki (Wikipedia-like system) --------
+
+@app.post("/wiki", response_model=WikiOut)
+def create_wiki(page: WikiCreate, db: Session = Depends(get_db)):
+    db_page = models.WikiPage(
+        slug=page.slug,
+        title=page.title,
+        content=page.content
+    )
+    db.add(db_page)
+    db.commit()
+    db.refresh(db_page)
+    return page
+
+@app.get("/wiki")
+def list_wiki(db: Session = Depends(get_db)):
+    pages = db.query(models.WikiPage).all()
+    return pages
+
+@app.get("/wiki/{slug}")
+def get_wiki(slug: str, db: Session = Depends(get_db)):
+    page = db.query(models.WikiPage).filter(models.WikiPage.slug == slug).first()
+    if not page:
+        return {"error": "not found"}
+    return page
+
+@app.put("/wiki/{slug}")
+def update_wiki(slug: str, page: WikiCreate, db: Session = Depends(get_db)):
+    db_page = db.query(models.WikiPage).filter(models.WikiPage.slug == slug).first()
+    if not db_page:
+        return {"error": "not found"}
+
+    db_page.title = page.title
+    db_page.content = page.content
+
+    db.commit()
+    db.refresh(db_page)
+
+    return db_page
