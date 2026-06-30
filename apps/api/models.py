@@ -10,3 +10,12 @@ class Article(Base):
     content = Column(Text, nullable=False)
     author = Column(String, nullable=True)
     tags = Column(String, nullable=True)  # armazenado como string separada por vírgulas
+
+
+class WikiPage(Base):
+    __tablename__ = "wiki_pages"
+
+    slug = Column(String, primary_key=True)  # URL amigável
+    title = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    updated_at = Column(String, nullable=True)
