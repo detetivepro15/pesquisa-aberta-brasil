@@ -6,12 +6,19 @@ from sqlalchemy.orm import Session
 from database import engine, Base, get_db
 import models
 
-# Cria tabelas no banco
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Pesquisa Aberta Brasil API")
 
 # ---------- Schemas ----------
+class UserCreate(BaseModel):
+    username: str
+    password: str
+
+class UserOut(BaseModel):
+    id: str
+    username: str
+
 class ArticleCreate(BaseModel):
     title: str
     content: str
@@ -29,14 +36,29 @@ class WikiCreate(BaseModel):
 class WikiOut(WikiCreate):
     pass
 
-# ---------- Routes ----------
+# ---------- AUTH ----------
+@app.post("/auth/register", response_model=UserOut)
+def register(user: UserCreate, db: Session = Depends(get_db)):
+    existing = db.query(models.User).filter(models.User.username == user.username).first()
+    if existing:
+        return {"error": "user exists"}
 
-@app.get("/")
-def root():
-    return {"message": "Pesquisa Aberta Brasil API ativa"}
+    db_user = models.User(username=user.username, password=user.password)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return {"id": db_user.id, "username": db_user.username}
 
-# -------- Articles --------
+@app.post("/auth/login")
+def login(user: UserCreate, db: Session = Depends(get_db)):
+    db_user = db.query(models.User).filter(models.User.username == user.username).first()
 
+    if not db_user or db_user.password != user.password:
+        return {"error": "invalid credentials"}
+
+    return {"message": "login successful", "user_id": db_user.id}
+
+# ---------- ARTICLES ----------
 @app.post("/articles", response_model=ArticleOut)
 def create_article(article: ArticleCreate, db: Session = Depends(get_db)):
     db_article = models.Article(
@@ -84,8 +106,7 @@ def get_article(article_id: str, db: Session = Depends(get_db)):
         tags=a.tags.split(",") if a.tags else []
     )
 
-# -------- Wiki (Wikipedia-like system) --------
-
+# ---------- WIKI ----------
 @app.post("/wiki", response_model=WikiOut)
 def create_wiki(page: WikiCreate, db: Session = Depends(get_db)):
     db_page = models.WikiPage(
@@ -100,8 +121,7 @@ def create_wiki(page: WikiCreate, db: Session = Depends(get_db)):
 
 @app.get("/wiki")
 def list_wiki(db: Session = Depends(get_db)):
-    pages = db.query(models.WikiPage).all()
-    return pages
+    return db.query(models.WikiPage).all()
 
 @app.get("/wiki/{slug}")
 def get_wiki(slug: str, db: Session = Depends(get_db)):
@@ -118,13 +138,11 @@ def update_wiki(slug: str, page: WikiCreate, db: Session = Depends(get_db)):
 
     db_page.title = page.title
     db_page.content = page.content
-
     db.commit()
     db.refresh(db_page)
-
     return db_page
 
-# -------- SEARCH --------
+# ---------- SEARCH ----------
 @app.get("/search")
 def search(q: str, db: Session = Depends(get_db)):
     query = f"%{q}%"
