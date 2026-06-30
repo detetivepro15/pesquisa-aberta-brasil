@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Query
 from pydantic import BaseModel
 from typing import List, Optional
 from sqlalchemy.orm import Session
@@ -123,3 +123,29 @@ def update_wiki(slug: str, page: WikiCreate, db: Session = Depends(get_db)):
     db.refresh(db_page)
 
     return db_page
+
+# -------- SEARCH --------
+@app.get("/search")
+def search(q: str, db: Session = Depends(get_db)):
+    query = f"%{q}%"
+
+    articles = db.query(models.Article).filter(
+        models.Article.title.ilike(query) |
+        models.Article.content.ilike(query)
+    ).all()
+
+    wiki_pages = db.query(models.WikiPage).filter(
+        models.WikiPage.title.ilike(query) |
+        models.WikiPage.content.ilike(query)
+    ).all()
+
+    return {
+        "articles": [
+            {"id": a.id, "title": a.title, "type": "article"}
+            for a in articles
+        ],
+        "wiki": [
+            {"slug": w.slug, "title": w.title, "type": "wiki"}
+            for w in wiki_pages
+        ]
+    }
