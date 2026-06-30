@@ -1,0 +1,2 @@
+# pesquisa-aberta-brasil
+pesquisa-aberta-brasil │ ├── README.md ├── LICENSE ├── CONTRIBUTING.md ├── CHANGELOG.md ├── CODE_OF_CONDUCT.md │ ├── apps/ │   ├── web/ │   └── api/ │ ├── packages/ │   ├── ui/ │   ├── database/ │   ├── auth/ │   └── search/ │ ├── docs/ ├── wiki/ ├── papers/ ├── datasets/ ├── scripts/ └── .github/     └── workflows/
