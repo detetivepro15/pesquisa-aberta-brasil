@@ -9,7 +9,7 @@ class Article(Base):
     title = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     author = Column(String, nullable=True)
-    tags = Column(String, nullable=True)  # armazenado como string separada por vírgulas
+    tags = Column(String, nullable=True)
     user_id = Column(String, nullable=True)
 
 
@@ -28,3 +28,36 @@ class User(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     username = Column(String, unique=True, nullable=False)
     password = Column(String, nullable=False)
+
+
+# ---------------- VERSIONING ----------------
+class ArticleVersion(Base):
+    __tablename__ = "article_versions"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    article_id = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(String, nullable=True)
+
+
+class WikiVersion(Base):
+    __tablename__ = "wiki_versions"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    slug = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(String, nullable=True)
+
+
+# ---------------- COMMENTS ----------------
+class Comment(Base):
+    __tablename__ = "comments"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    target_type = Column(String, nullable=False)  # "article" or "wiki"
+    target_id = Column(String, nullable=False)
+    user_id = Column(String, nullable=True)
+    content = Column(Text, nullable=False)
+    created_at = Column(String, nullable=True)
